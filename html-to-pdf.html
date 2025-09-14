@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pl" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konwerter HTML do PDF [Railway Edition]</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        :root {
+            --pico-primary: #3f51b5; --pico-primary-hover: #3949ab;
+            --pico-primary-focus: rgba(63, 81, 181, 0.25);
+        }
+        body { background-color: #f4f5f7; padding: 2rem 1rem; }
+        main.container { max-width: 800px; margin: 0 auto; }
+        article { padding: 2.5rem; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); }
+        hgroup { text-align: center; margin-bottom: 2rem; }
+        .file-input-wrapper {
+            border: 2px dashed var(--pico-primary-focus); padding: 2rem; text-align: center; cursor: pointer;
+            transition: background-color 0.2s ease; border-radius: var(--pico-border-radius);
+        }
+        .file-input-wrapper:hover { background-color: var(--pico-primary-focus); }
+        input[type="file"] { display: none; }
+        #convertBtn { width: 100%; padding: 1rem; font-size: 1.1em; font-weight: bold; }
+        #status { margin-top: 1.5rem; text-align: center; display: none; }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <article>
+            <hgroup>
+                <h1>Konwerter HTML do PDF <sup>Railway Edition</sup></h1>
+                <h2>Twoje darmowe, prywatne API do generowania PDF w chmurze</h2>
+            </hgroup>
+
+            <form id="converterForm">
+                <label for="apiUrl">
+                    URL Twojego API na Railway
+                    <input type="url" id="apiUrl" name="apiUrl" placeholder="railway-pdf-api-production.up.railway.app" required>
+                </label>
+                <hr>
+                
+                <label for="fileInput" id="fileInputLabel" class="file-input-wrapper">
+                    <p style="margin: 0;"><strong>Kliknij, aby wybrać plik e-booka (.html)</strong></p>
+                    <small id="fileName">Nie wybrano pliku</small>
+                </label>
+                <input type="file" id="fileInput" accept=".html, .htm" />
+                
+                <button type="submit" id="convertBtn" disabled>Wybierz plik, aby rozpocząć</button>
+            </form>
+            
+            <div id="status">
+                <progress indeterminate="true"></progress>
+                <p id="statusText">Proszę czekać...</p>
+            </div>
+        </article>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const converterForm = document.getElementById('converterForm');
+            const apiUrlInput = document.getElementById('apiUrl');
+            const fileInput = document.getElementById('fileInput');
+            const fileInputLabel = document.getElementById('fileInputLabel');
+            const fileNameDisplay = document.getElementById('fileName');
+            const convertBtn = document.getElementById('convertBtn');
+            const statusDiv = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+
+            let selectedFile = null;
+            let ebookFilename = 'ebook.pdf';
+
+            apiUrlInput.value = localStorage.getItem('railwayPdfApiUrl') || '';
+            apiUrlInput.addEventListener('input', () => {
+                localStorage.setItem('railwayPdfApiUrl', apiUrlInput.value);
+            });
+            
+            fileInputLabel.addEventListener('click', () => fileInput.click());
+
+            fileInput.addEventListener('change', (event) => {
+                if (event.target.files.length > 0) {
+                    selectedFile = event.target.files[0];
+                    fileNameDisplay.textContent = `Wybrano: ${selectedFile.name}`;
+                    ebookFilename = selectedFile.name.replace(/\.html?$/, '.pdf');
+                    convertBtn.disabled = false;
+                    convertBtn.textContent = 'Generuj PDF najwyższej jakości';
+                }
+            });
+
+            converterForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                let apiUrl = apiUrlInput.value.trim();
+                if (!selectedFile || !apiUrl) {
+                    alert('Proszę podać URL API i wybrać plik HTML.');
+                    return;
+                }
+
+                // Upewniamy się, że URL kończy się ścieżką do naszego endpointu
+                if (!apiUrl.endsWith('/api/generate-pdf')) {
+                    apiUrl = apiUrl.replace(/\/$/, '') + '/api/generate-pdf';
+                }
+
+                setLoadingState(true, 'Odczytywanie pliku...');
+
+                const reader = new FileReader();
+                reader.readAsText(selectedFile);
+
+                reader.onload = async (e) => {
+                    const htmlContent = e.target.result;
+                    setLoadingState(true, 'Wysyłanie do Twojego API i renderowanie...');
+
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ html: htmlContent })
+                        });
+                        
+                        if (!response.ok) {
+                           throw new Error(`Błąd API (${response.status}): ${await response.text()}`);
+                        }
+
+                        setLoadingState(true, 'Pobieranie gotowego pliku PDF...');
+                        
+                        const pdfBlob = await response.blob();
+                        const url = URL.createObjectURL(pdfBlob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = ebookFilename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        setLoadingState(false);
+
+                    } catch (error) {
+                        console.error('Błąd konwersji:', error);
+                        alert(`Wystąpił błąd: ${error.message}`);
+                        setLoadingState(false);
+                    }
+                };
+            });
+
+            function setLoadingState(isLoading, message = '') {
+                if (isLoading) {
+                    convertBtn.disabled = true;
+                    statusDiv.style.display = 'block';
+                    statusText.textContent = message;
+                } else {
+                    convertBtn.disabled = false;
+                    statusDiv.style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
