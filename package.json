@@ -1,0 +1,12 @@
+{
+  "name": "pdf-konwerter-frontend",
+  "version": "1.0.0",
+  "description": "Static frontend for the PDF conversion tool.",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve -l $PORT"
+  },
+  "dependencies": {
+    "serve": "^14.2.1"
+  }
+}
